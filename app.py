@@ -15,33 +15,38 @@ def load_data():
     df = pd.get_dummies(df, drop_first=True)
     return df
 
+@st.cache_resource
+def train_model(df):
+    target_col = [col for col in df.columns if "Churn" in col or "churn" in col][0]
+    
+    X = df.drop(target_col, axis=1)
+    y = df[target_col]
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    model = RandomForestClassifier(n_estimators=150, random_state=42)
+    model.fit(X_scaled, y)
+
+    return model, scaler, X.columns
+
 df = load_data()
-
-# Auto detect churn column
-target_col = [col for col in df.columns if "Churn" in col or "churn" in col][0]
-
-X = df.drop(target_col, axis=1)
-y = df[target_col]
-
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-
-model = RandomForestClassifier(n_estimators=150, random_state=42)
-model.fit(X_scaled, y)
+model, scaler, feature_cols = train_model(df)
 
 st.sidebar.header("Customer Details")
 
 input_data = {}
 
-for col in X.columns:
-    input_data[col] = st.sidebar.number_input(col, float(X[col].min()), float(X[col].max()), float(X[col].mean()))
+for col in feature_cols:
+    input_data[col] = st.sidebar.number_input(col, float(df[col].min()), float(df[col].max()), float(df[col].mean()))
 
 input_df = pd.DataFrame([input_data])
 input_scaled = scaler.transform(input_df)
 
 if st.button("Predict"):
-    pred = model.predict(input_scaled)[0]
-    prob = model.predict_proba(input_scaled)[0][1]
+    with st.spinner("Predicting..."):
+        pred = model.predict(input_scaled)[0]
+        prob = model.predict_proba(input_scaled)[0][1]
 
     if pred == 1:
         st.error(f"⚠️ Customer will churn (Risk: {prob*100:.2f}%)")
